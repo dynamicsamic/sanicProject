@@ -1,6 +1,5 @@
 from contextvars import ContextVar
 from http.client import OK, NO_CONTENT, BAD_REQUEST, FORBIDDEN, UNAUTHORIZED, NOT_FOUND, CREATED
-from tkinter import ACTIVE
 import pytest
 from sanic import Sanic, Blueprint, response, json
 from sanic_testing import TestManager
@@ -232,35 +231,34 @@ class TestGroupUsers:
         assert response.status == OK
         assert len(response.json.get('users')) == len((admin_user, active_user, inactive_user))
 
-    #async def test_users_list_fails_for_non_admin(self, app):
-    #    _, response = await app.asgi_client.get('/users', headers=active_user_auth_header)
-    #    assert response.status == FORBIDDEN
+    async def test_users_list_fails_for_non_admin(self, app):
+        _, response = await app.asgi_client.get('/users', headers=active_user_auth_header)
+        assert response.status == FORBIDDEN
 
-    #async def test_user_detail_success_for_admin(self, app):
-    #    _, response = await app.asgi_client.get(f'/users/{active_user.id}', headers=admin_auth_header)
-    #    assert response.status == OK
-    #    data = response.json
-    #    assert data.get('id') == active_user.id
-    #    assert data.get('name') == active_user.username
-    #    assert data.get('email') == active_user.email
-    #    assert data.get('status') == active_user.status
-    #    assert data.get('admin') == active_user._is_admin
+    async def test_user_detail_success_for_admin(self, app):
+        _, response = await app.asgi_client.get(f'/users/{active_user.id}', headers=admin_auth_header)
+        assert response.status == OK
+        data = response.json
+        assert data.get('id') == active_user.id
+        assert data.get('name') == active_user.username
+        assert data.get('email') == active_user.email
+        assert data.get('status') == active_user.status
+        assert data.get('admin') == active_user._is_admin
 #
-    #async def test_user_detail_fails_for_non_admin(self, app):
-    #    _, response = await app.asgi_client.get(f'/users/{active_user.id}', headers=active_user_auth_header)
-    #    assert response.status == FORBIDDEN
-
-    #async def test_create_inactive_user_success_for_admin(self, app):
-    #    req, response = await app.asgi_client.post('/users', headers=admin_auth_header, json=valid_user.to_dict())
-    #    assert response.status == CREATED
-    #    data = response.json
-    #    assert data.get('name') == valid_user.username
-    #    assert data.get('email') == valid_user.email
-    #    assert data.get('status') == valid_user.status
-    #    assert data.get('admin') == valid_user._is_admin
-
-    #    # teardown
-    #    await delete_obj(req.ctx.session, User, data.get('id'))
+    async def test_user_detail_fails_for_non_admin(self, app):
+        _, response = await app.asgi_client.get(f'/users/{active_user.id}', headers=active_user_auth_header)
+        assert response.status == FORBIDDEN
+    
+    async def test_create_inactive_user_success_for_admin(self, app):
+        req, response = await app.asgi_client.post('/users', headers=admin_auth_header, json=valid_user.to_dict())
+        assert response.status == CREATED
+        data = response.json
+        assert data.get('name') == valid_user.username
+        assert data.get('email') == valid_user.email
+        assert data.get('status') == valid_user.status
+        assert data.get('admin') == valid_user._is_admin
+        # teardown
+        await delete_obj(req.ctx.session, User, data.get('id'))
 
     #async def test_create_active_user_success_for_admin(self, app):
     #    ACTIVE_STATUS = 'active'
