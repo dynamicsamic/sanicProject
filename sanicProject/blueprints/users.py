@@ -1,10 +1,13 @@
+import asyncio
 from http.client import BAD_REQUEST, CREATED, NOT_FOUND, NO_CONTENT
 from sanic import Blueprint, Request, json
 from sanic.response import HTTPResponse
 from sanic.exceptions import NotFound, BadRequest
+from sanic.log import logger
 from sanic_jwt import protected, inject_user
 from sanic_ext import validate
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import sessionmaker
 from sqlalchemy import update
 
 from ..models import Account, User, UserStatus
@@ -18,6 +21,31 @@ users = Blueprint('users_for_admin', url_prefix='users')
 async def inject_user_manager(request: Request) -> None:
     """Add CRUD manager to request."""
     request.ctx.crud = UserCRUDManager(request.ctx.session)
+
+@users.signal('app.user.deleted')
+async def sig_delete_user(sleep_for: int = 10, **context):
+    #logger.info('Start_waiting')
+    #await asyncio.sleep(sleep_for)
+    
+    req = context.get('request')
+    print(req)
+    user_id = context.get('id')
+    print(user_id)
+    app = req.app
+    print(req.app.ctx.bind)
+    #logger.info(f'{app.bind}')
+    session = sessionmaker(app.ctx.bind, AsyncSession, expire_on_commit=False)()
+    #print(session)
+    #session = req.ctx.session 
+    logger.info('session created')
+    async with session.begin():
+        logger.warning('session started')
+        user = await session.get(User, user_id)
+        print(user)
+    #    print(user)
+    logger.warning(f'{user.to_dict()}')
+    logger.info('ended waiting')
+    #await req.ctx.crud.delete_user(user_id)
 
 
 @users.get('/')
@@ -57,9 +85,8 @@ async def add_user(request: Request, body: UserAdminCreateSchema, *args, **kwarg
         new_user = await request.ctx.crud.create_user(valid_data)
 
     result = new_user.to_dict()
-    activation_link = {'activation_link': f'http://127.0.0.1:8000/users/{new_user.id}/activate'}
-    result.update(activation_link)
-
+    #activation_link = {'activation_link': f'http://127.0.0.1:8000/users/{new_user.id}/activate'}
+    #sresult.update(activation_link)
     return json(result, status=CREATED)
 
 
@@ -70,25 +97,9 @@ async def add_user(request: Request, body: UserAdminCreateSchema, *args, **kwarg
 @validate(UserAdminUpdateSchema)
 async def update_user(request: Request, id: int, body: UserAdminUpdateSchema, *args, **kwargs) -> HTTPResponse:
     if valid_data := body.dict(exclude_unset=True):
-        session: AsyncSession = request.ctx.session
-        async with session.begin():
-            await User.update_object(session, id, valid_data)
-#    if valid_data := body.dict(exclude_unset=True):
-#        session: AsyncSession = request.ctx.session
-#        async with session.begin():
-#            q = update(User).where(User.id == id).values(**valid_data)
-#            try:
-#                await session.execute(q)
-#                await session.commit()
-#            except Exception as e:
-#                await session.rollback()
-#                raise BadRequest(context={f'{e.__class__.__name__}': f'{e.args}'})
-        async with session.begin():
-            user = await session.get(User, id)
-            return json(user.to_dict())
-#
-    #print(list(all(el for el in body.dict())))
-    return json(request.json)
+        await request.ctx.crud.update_user(id, valid_data)
+    user = await request.ctx.crud.get_user(id)
+    return json(user.to_dict())
 
 
 @users.delete('/<id:int>')
@@ -97,36 +108,40 @@ async def update_user(request: Request, id: int, body: UserAdminUpdateSchema, *a
 @authorized()
 async def delete_user(request: Request, id: int, *args, **kwargs) -> HTTPResponse:
     """Admin only"""
-    session: AsyncSession = request.ctx.session
-    #user = await get_model_instance(session, User, get_query_params(request.uri_template), val=username)
-    async with session.begin():
-#        if accounts := select(Account).where(Account.user_id == id)
-        if accounts := await Account.get_many(session, ['user_id', id]):
-            for account in accounts:
-                account.user_status = UserStatus.DELETED
-        await User.delete_object(session, id)
-        #if user := await User.get(session, id, related='accounts'):
-        #    
-        #    # Change this to select(Account).where(Account.user_id == id)
-        #    for account in user.accounts:
-        #        account.user_status = UserStatus.DELETED
-        #if user := await get_obj_by_id(session, User, id):
-            #if accounts := await user.get_accounts(session):
-            #    for account in accounts:
-            #        account.user_status = UserStatus.DELETED
-            #try:
-            #    await session.delete(user)
-            #    await session.commit()
-            #except Exception as e:
-            #    await session.rollback()
-            #    raise DBError(context={f'{e.__class__.__name__}': f'{e.args}'})
-            #finally:
-            #    await session.close()
-
-
-        return json({'user with id `{id}`': 'deleted'}, status=204)
-
-    raise NotFound
+    res = await request.app.dispatch('app.user.deleted', context={'request': request, 'id': id})
+    logger.warning('dispatched')
+    return json({})
+    return json({'res': res})
+    #session: AsyncSession = request.ctx.session
+    ##user = await get_model_instance(session, User, get_query_params(request.uri_template), val=username)
+    #async with session.begin():
+#   #     if accounts := select(Account).where(Account.user_id == id)
+    #    if accounts := await Account.get_many(session, ['user_id', id]):
+    #        for account in accounts:
+    #            account.user_status = UserStatus.DELETED
+    #    await User.delete_object(session, id)
+    #    #if user := await User.get(session, id, related='accounts'):
+    #    #    
+    #    #    # Change this to select(Account).where(Account.user_id == id)
+    #    #    for account in user.accounts:
+    #    #        account.user_status = UserStatus.DELETED
+    #    #if user := await get_obj_by_id(session, User, id):
+    #        #if accounts := await user.get_accounts(session):
+    #        #    for account in accounts:
+    #        #        account.user_status = UserStatus.DELETED
+    #        #try:
+    #        #    await session.delete(user)
+    #        #    await session.commit()
+    #        #except Exception as e:
+    #        #    await session.rollback()
+    #        #    raise DBError(context={f'{e.__class__.__name__}': f'{e.args}'})
+    #        #finally:
+    #        #    await session.close()
+#
+#
+    #    return json({'user with id `{id}`': 'deleted'}, status=204)
+#
+    #raise NotFound
     #return json(
     #    {'error': f'user with id `{id}` not found'},
     #    status=NOT_FOUND
