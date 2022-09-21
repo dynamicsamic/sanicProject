@@ -91,10 +91,6 @@ class User(BaseModel):
         
         return False
 
-    def add_session(self, session):
-        self.session = session
-        #res = select(Account).where(Account.user_id==self.id)
-        #return res
 
     async def get_accounts(self, session: AsyncSession) -> ScalarResult:
         query = select(Account).where(Account.user_id==self.id)
