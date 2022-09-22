@@ -6,14 +6,17 @@ from sanic.exceptions import NotFound, BadRequest
 from sanic.log import logger
 from sanic_jwt import protected, inject_user
 from sanic_ext import validate
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import update
+
+from sanicProject.utils import async_execute
 
 from ..models import Account, User, UserStatus
 from ..auth import authorized
 from ..schemas import UserAdminCreateSchema, UserAdminUpdateSchema
 from sanicProject.crud import UserCRUDManager
+from sanicProject.settings import PYTEST_DB
 
 users = Blueprint('users_for_admin', url_prefix='users')
 
@@ -23,28 +26,54 @@ async def inject_user_manager(request: Request) -> None:
     request.ctx.crud = UserCRUDManager(request.ctx.session)
 
 @users.signal('app.user.deleted')
-async def sig_delete_user(sleep_for: int = 10, **context):
-    #logger.info('Start_waiting')
+#@async_execute()
+async def sig_delete_user(**context):
+    logger.info('Start_waiting')
     #await asyncio.sleep(sleep_for)
-    
-    req = context.get('request')
-    print(req)
-    user_id = context.get('id')
-    print(user_id)
-    app = req.app
-    print(req.app.ctx.bind)
+    engine = create_async_engine(
+                PYTEST_DB,
+                pool_pre_ping=True,
+                echo=True
+            )
+    session = sessionmaker(
+        engine,
+        AsyncSession,
+        expire_on_commit=False
+    )()
+    crud = UserCRUDManager(session)
+    logger.warning('here')
+    await crud.update_user(114, {'email': 'invalid_email@hello.py'})
+    logger.warning('updated')
+    #await engine.dispose()
+    #logger.warning('here')
+    #async with session.begin():
+    #    logger.warning('session started')
+    #    return await session.get(User, 101)
+    #    logger.warning('session ended')
+    #    #print(res.to_dict())
+    #logger.warning('HERE')
+    #user_id = context.get('id')
+    #user_id = 10
+    #user = await session.get(User, user_id)
+    #return user
+    #req = context.get('request')
+    #print(req)
+    #user_id = context.get('id')
+    #print(user_id)
+    #app = req.app
+    #print(req.app.ctx.bind)
     #logger.info(f'{app.bind}')
-    session = sessionmaker(app.ctx.bind, AsyncSession, expire_on_commit=False)()
+    #session = sessionmaker(app.ctx.bind, AsyncSession, expire_on_commit=False)()
     #print(session)
     #session = req.ctx.session 
-    logger.info('session created')
-    async with session.begin():
-        logger.warning('session started')
-        user = await session.get(User, user_id)
-        print(user)
+    #logger.info('session created')
+    #async with session.begin():
+    #    logger.warning('session started')
+    #    user = await session.get(User, user_id)
     #    print(user)
-    logger.warning(f'{user.to_dict()}')
-    logger.info('ended waiting')
+    #    print(user)
+    #logger.warning(f'{user.to_dict()}')
+    #logger.info('ended waiting')
     #await req.ctx.crud.delete_user(user_id)
 
 
